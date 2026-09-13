@@ -72,4 +72,37 @@ def geocode_trip_locations(current_location, pickup_location, dropoff_location):
         "dropoff_location": dropoff,
     }
 
-   
+def get_route(locations):
+    coordinates = ";".join(
+        f"{location['longitude']},{location['latitude']}"
+        for location in locations
+    )
+
+    url = f"https://router.project-osrm.org/route/v1/driving/{coordinates}"
+
+    params = {
+        "overview": "full",
+        "geometries": "geojson",
+        "steps": "true",
+    }
+
+    response = requests.get(
+        url,
+        params=params,
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    if data["code"] != "Ok":
+        return None
+
+    route = data["routes"][0]
+
+    return {
+        "distance_miles": route["distance"] / 1609.34,
+        "duration_hours": route["duration"] / 3600,
+        "geometry": route["geometry"],
+    }   

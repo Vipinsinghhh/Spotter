@@ -2,7 +2,11 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .serializers import TripPlanSerializer
-from .services import calculate_available_hours, geocode_trip_locations
+from .services import (
+    calculate_available_hours,
+    geocode_trip_locations,
+    get_route,
+)
 
 @api_view(['POST'])
 def plan_trip(request):
@@ -17,6 +21,12 @@ def plan_trip(request):
             trip_data['dropoff_location'],
         )
 
+        route = get_route([
+            locations['current_location'],
+            locations['pickup_location'],
+            locations['dropoff_location'],
+        ])
+
         hos_data = calculate_available_hours(
             trip_data['cycle_used_hours']
         )
@@ -25,6 +35,7 @@ def plan_trip(request):
             'message': 'Trip planning API is working',
             'received_data': trip_data,
             'locations': locations,
+            'route': route,
             'hos_data': hos_data,
         })
 
