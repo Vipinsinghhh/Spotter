@@ -6,7 +6,10 @@ from .services import (
     calculate_available_hours,
     geocode_trip_locations,
     get_route,
+    calculate_hos_schedule,
+    generate_daily_logs,
 )
+
 
 @api_view(['POST'])
 def plan_trip(request):
@@ -31,12 +34,22 @@ def plan_trip(request):
             trip_data['cycle_used_hours']
         )
 
+        hos_schedule = calculate_hos_schedule(
+            route['duration_hours'],
+            trip_data['cycle_used_hours'],
+            route['distance_miles'],
+        )
+        
+        daily_logs = generate_daily_logs(hos_schedule)
+
         return Response({
             'message': 'Trip planning API is working',
             'received_data': trip_data,
             'locations': locations,
             'route': route,
             'hos_data': hos_data,
+            'hos_schedule': hos_schedule,
+            'daily_logs': daily_logs,
         })
 
     return Response(serializer.errors, status=400)
