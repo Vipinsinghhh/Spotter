@@ -1,3 +1,4 @@
+import math
 import requests
 import time
 
@@ -55,7 +56,11 @@ def geocode_location(location):
     }
 
 
-def geocode_trip_locations(current_location, pickup_location, dropoff_location):
+def geocode_trip_locations(
+    current_location,
+    pickup_location,
+    dropoff_location,
+):
     current = geocode_location(current_location)
 
     time.sleep(1)
@@ -72,13 +77,17 @@ def geocode_trip_locations(current_location, pickup_location, dropoff_location):
         "dropoff_location": dropoff,
     }
 
+
 def get_route(locations):
     coordinates = ";".join(
         f"{location['longitude']},{location['latitude']}"
         for location in locations
     )
 
-    url = f"https://router.project-osrm.org/route/v1/driving/{coordinates}"
+    url = (
+        f"https://router.project-osrm.org/route/v1/driving/"
+        f"{coordinates}"
+    )
 
     params = {
         "overview": "full",
@@ -102,18 +111,66 @@ def get_route(locations):
     route = data["routes"][0]
 
     return {
-    "distance_miles": route["distance"] / 1609.34,
-    "duration_hours": route["duration"] / 3600,
-    "geometry": route["geometry"],
-    "legs": [
-        {
-            "distance_miles": leg["distance"] / 1609.34,
-            "duration_hours": leg["duration"] / 3600,
+        "distance_miles": route["distance"] / 1609.34,
+        "duration_hours": route["duration"] / 3600,
+        "geometry": route["geometry"],
+        "legs": [
+            {
+                "distance_miles": leg["distance"] / 1609.34,
+                "duration_hours": leg["duration"] / 3600,
+            }
+            for leg in route["legs"]
+        ],
+    }
+
+
+def get_route_point_at_mile(geometry, target_mile):
+    coordinates = geometry["coordinates"]
+
+    if target_mile <= 0:
+        longitude, latitude = coordinates[0]
+
+        return {
+            "latitude": latitude,
+            "longitude": longitude,
         }
-        for leg in route["legs"]
-    ],
-}
-    
+
+    accumulated_miles = 0
+
+    for index in range(1, len(coordinates)):
+        previous = coordinates[index - 1]
+        current = coordinates[index]
+
+        lon1, lat1 = previous
+        lon2, lat2 = current
+
+        lat_diff = lat2 - lat1
+        lon_diff = lon2 - lon1
+
+        segment_distance = (
+            math.sqrt(
+                lat_diff ** 2 + lon_diff ** 2
+            ) * 69
+        )
+
+        if accumulated_miles + segment_distance >= target_mile:
+            longitude, latitude = current
+
+            return {
+                "latitude": latitude,
+                "longitude": longitude,
+            }
+
+        accumulated_miles += segment_distance
+
+    longitude, latitude = coordinates[-1]
+
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+    }
+
+
 def calculate_hos_schedule(
     duration_hours,
     cycle_used_hours,
@@ -134,7 +191,6 @@ def calculate_hos_schedule(
 
     while remaining_driving > 0:
 
-        # 34-hour restart if cycle is exhausted
         if cycle_remaining <= 0:
             days.append({
                 "day": day_number,
@@ -159,7 +215,6 @@ def calculate_hos_schedule(
         driving_today = 0
         driving_since_break = 0
 
-        # Pickup only when trip actually starts
         if not trip_started:
             events.append({
                 "type": "pickup",
@@ -177,7 +232,6 @@ def calculate_hos_schedule(
             and cycle_remaining > 0
         ):
 
-            # Take break after 8 hours of cumulative driving
             if driving_since_break >= BREAK_AFTER_DRIVING_HOURS:
                 events.append({
                     "type": "break",
@@ -185,9 +239,9 @@ def calculate_hos_schedule(
                 })
 
                 driving_since_break = 0
+
                 continue
 
-            # Distance until next fuel stop
             distance_until_fuel = (
                 next_fuel_mile - total_distance_driven
             )
@@ -215,7 +269,10 @@ def calculate_hos_schedule(
 
             events.append({
                 "type": "driving",
-                "duration_hours": round(available_driving, 2),
+                "duration_hours": round(
+                    available_driving,
+                    2,
+                ),
             })
 
             remaining_driving -= available_driving
@@ -228,7 +285,6 @@ def calculate_hos_schedule(
                 available_driving * average_speed
             )
 
-            # Fuel stop at 1000-mile intervals
             if (
                 total_distance_driven >= next_fuel_mile
                 and next_fuel_mile <= distance_miles
@@ -237,18 +293,24 @@ def calculate_hos_schedule(
                     events.append({
                         "type": "fuel",
                         "duration_hours": 0.5,
-                        "at_mile": round(next_fuel_mile, 2),
+                        "at_mile": round(
+                            next_fuel_mile,
+                            2,
+                        ),
                     })
 
                     on_duty_hours += 0.5
                     cycle_remaining -= 0.5
                     next_fuel_mile += FUEL_STOP_MILES
+
                 else:
                     break
 
-        # Dropoff when all driving is completed
         if remaining_driving <= 0:
-            if on_duty_hours + DROPOFF_TIME_HOURS <= ON_DUTY_WINDOW_HOURS:
+            if (
+                on_duty_hours + DROPOFF_TIME_HOURS
+                <= ON_DUTY_WINDOW_HOURS
+            ):
                 events.append({
                     "type": "dropoff",
                     "duration_hours": DROPOFF_TIME_HOURS,
@@ -259,9 +321,17 @@ def calculate_hos_schedule(
 
         days.append({
             "day": day_number,
-            "driving_hours": round(driving_today, 2),
-            "on_duty_hours": round(on_duty_hours, 2),
-            "on_duty_window_hours": ON_DUTY_WINDOW_HOURS,
+            "driving_hours": round(
+                driving_today,
+                2,
+            ),
+            "on_duty_hours": round(
+                on_duty_hours,
+                2,
+            ),
+            "on_duty_window_hours": (
+                ON_DUTY_WINDOW_HOURS
+            ),
             "cycle_remaining_hours": round(
                 max(cycle_remaining, 0),
                 2,
@@ -272,15 +342,22 @@ def calculate_hos_schedule(
         day_number += 1
 
     return {
-        "total_driving_hours": round(duration_hours, 2),
-        "total_distance_miles": round(distance_miles, 2),
+        "total_driving_hours": round(
+            duration_hours,
+            2,
+        ),
+        "total_distance_miles": round(
+            distance_miles,
+            2,
+        ),
         "cycle_remaining_hours": round(
             max(cycle_remaining, 0),
             2,
         ),
         "days": days,
     }
-    
+
+
 def generate_daily_logs(hos_schedule):
     daily_logs = []
 
@@ -293,20 +370,31 @@ def generate_daily_logs(hos_schedule):
 
             segments.append({
                 "type": event["type"],
-                "start_hour": round(current_hour, 2),
-                "end_hour": round(current_hour + duration, 2),
+                "start_hour": round(
+                    current_hour,
+                    2,
+                ),
+                "end_hour": round(
+                    current_hour + duration,
+                    2,
+                ),
                 "duration_hours": duration,
             })
 
             current_hour += duration
 
-        # Remaining time of the 24-hour day is off duty
         if current_hour < 24:
             segments.append({
                 "type": "off_duty",
-                "start_hour": round(current_hour, 2),
+                "start_hour": round(
+                    current_hour,
+                    2,
+                ),
                 "end_hour": 24,
-                "duration_hours": round(24 - current_hour, 2),
+                "duration_hours": round(
+                    24 - current_hour,
+                    2,
+                ),
             })
 
         daily_logs.append({
@@ -314,4 +402,4 @@ def generate_daily_logs(hos_schedule):
             "segments": segments,
         })
 
-    return daily_logs    
+    return daily_logs
