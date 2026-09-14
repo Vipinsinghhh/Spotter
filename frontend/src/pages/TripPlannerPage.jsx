@@ -1,5 +1,6 @@
 import TripForm from "../components/trip/TripForm";
 import TripSummary from "../components/trip/TripSummary";
+import TripMap from "../components/map/TripMap";
 
 function TripPlannerPage() {
   return (
@@ -9,6 +10,8 @@ function TripPlannerPage() {
       <TripForm />
 
       <TripSummary />
+
+      <TripMap />
     </main>
   );
 }
